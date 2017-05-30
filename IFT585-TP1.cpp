@@ -31,22 +31,16 @@ int main()
 	ifstream fichierParametres;
 	fichierParametres.open("parametres.txt");
 
+	bool valide = true;
 	string line;
-	if ( fichierParametres.is_open() ) {
-		if ( getline(fichierParametres, line) ) {
-			tailleTempon = atoi(line.c_str());
-		}
+	if (fichierParametres.is_open()) {
+		tailleTempon = getline(fichierParametres, line) ? atoi(line.c_str()) : 0;
+		delaiTemporisation = getline(fichierParametres, line) ? atoi(line.c_str()) : -1;
+		fichierACopier = getline(fichierParametres, line) ? line : "";
+		fichierDestination = getline(fichierParametres, line) ? line.c_str() : "";
 
-		if (getline(fichierParametres, line)) {
-			delaiTemporisation = atoi(line.c_str());
-		}
-
-		if (getline(fichierParametres, line)) {
-			fichierACopier = line;
-		}
-
-		if (getline(fichierParametres, line)) {
-			fichierDestination = line;
+		if (tailleTempon < 1 || delaiTemporisation <= 0 || fichierACopier.empty() || fichierDestination.empty()) {
+			valide = false;
 		}
 	}
 	else {
@@ -57,16 +51,16 @@ int main()
 		<< "Delai de temporisation (ms): " << delaiTemporisation << endl
 		<< "Fichier a copier: " << fichierACopier << endl
 		<< "Fichier de destination: " << fichierDestination << endl << endl;
-			
+
 	ifstream entree;
 	entree.open(fichierACopier);
 
-	if (entree.is_open()) {
-		
+	if (valide && entree.is_open()) {
+
 	}
 	else {
-		cout << "Fichier a copier introuvable.";
+		cout << "Paramètres invalides ou fichier a copier introuvable.";
 	}
 	cin.get();
-    return 0;
+	return 0;
 }
