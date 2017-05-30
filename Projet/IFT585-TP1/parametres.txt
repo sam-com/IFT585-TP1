@@ -1,0 +1,4 @@
+10
+5000
+fichier.txt
+destination.txt
