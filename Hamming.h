@@ -2,5 +2,8 @@
 #include <stdint.h> 
 namespace Hamming
 {
-	uint16_t constructHamming(uint16_t donnees);
+	bool detecter(uint16_t donnees);
+	uint16_t corriger(uint16_t donnees);
+	uint16_t encoder(uint16_t donnees);
+	uint16_t decoder(uint16_t donnees);
 }
