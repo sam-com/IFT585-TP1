@@ -73,7 +73,7 @@ void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& co
 				delais[sequenceCourante].verifie = false;	
 				connection.trame = trame;						// On met la trame à envoyer dans la connexion
 				connection.etatLiaison = EtatLiaison::ENVOYE;	// On change l'état de liaison pour "trame envoye"
-				trameNakRecu = false;							
+				trameNakRecu = false;						
 			}
 			else if (trameDoitEtreEnvoye) {					// Si une trame ACK doit être envoyer (la couche recepteur)
 				connection.trame = trameAEnvoyer;			
@@ -91,7 +91,7 @@ void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& co
 					delais[sequenceCourante].verifie = false;	
 					connection.trame = trame;			
 					connection.etatLiaison = EtatLiaison::ENVOYE;
-					sequenceCourante = (sequenceCourante + 1) % maxSeq;	// On incrémente la séquence (doit être entre 0 et 7)
+					sequenceCourante = (sequenceCourante + 1) % maxSeq;	// On incrémente la séquence (doit être entre 0 et 7)*/
 				}
 			}
 			else {
@@ -226,12 +226,12 @@ int main()
 	EntreeFichier entreeFichier = EntreeFichier(fichierACopier);
 
 	std::thread th1(EmetterRecepteur, entreeFichier, SortieFichier(""), connection1);
-	std::thread th2(supportTransmission, connection1, connection2);
+	/*std::thread th2(supportTransmission, connection1, connection2);
 	std::thread th3(EmetterRecepteur, EntreeFichier(""), SortieFichier(fichierDestination), connection2);
 
 	th1.join();
 	th2.join();
-	th3.join();
+	th3.join();*/
 
 	system("pause");
 }

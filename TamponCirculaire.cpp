@@ -84,14 +84,14 @@ void TamponCirculaire::deplacerFenetre(int nbPosition) {
 vector<Trame> TamponCirculaire::getListeTrameNonValideDansFenetre() {
 	vector<Trame> v = vector<Trame>();
 	if (fenetre.debut < fenetre.fin) {
-		for (int i = fenetre.debut; i < fenetre.fin; i++) {
+		for (int i = fenetre.debut; i < std::min((int) v.size(), fenetre.fin); i++) {
 			if (v.at(i).getType() == TYPE_DONNEES) {
 				v.push_back(v.at(i));
 			}
 		}
 	} 
 	else {
-		for (int i = fenetre.debut; i < fenetre.taille; i++) {
+		for (int i = fenetre.debut; i < v.size(); i++) {
 			if (v.at(i).getType() == TYPE_DONNEES) {
 				v.push_back(v.at(i));
 			}
