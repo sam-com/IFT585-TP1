@@ -6,13 +6,13 @@
 #include <iostream>
 
 namespace Hamming {
-	bool getBit(uint16_t donnees, int position) // position in range 0-7
+	bool getBit(uint32_t donnees, int position) // position in range 0-7
 	{
 		return (donnees >> position) & 0x1;
 	}
 
 	// Retourne la valeur que devrait être le bit de contrôle à une position donnée
-	bool getValeurBitControle(uint16_t donnees, int positionBitControle) {
+	bool getValeurBitControle(uint32_t donnees, int positionBitControle) {
 		int sizeCheck = positionBitControle + 1;
 		int position = positionBitControle;
 		bool valeurBitControle;
@@ -34,7 +34,7 @@ namespace Hamming {
 	}
 
 	// Détecte s'il y a une erreur dans la données avec Hamming
-	int getValeurDesBitsControle(uint16_t donnees) {
+	int getValeurDesBitsControle(uint32_t donnees) {
 		int puissance = 0;
 		int positionBitControle = 0;
 		int resultat = 0;
@@ -53,17 +53,17 @@ namespace Hamming {
 	}
 
 	// Détecte s'il y a une erreur dans la données avec Hamming
-	bool detecter(uint16_t donnees) {
+	bool detecter(uint32_t donnees) {
 		return getValeurDesBitsControle(donnees) != 0;
 	}
 
-	uint16_t corriger(uint16_t donnees) {
+	uint32_t corriger(uint32_t donnees) {
 		return donnees ^= 1 << (getValeurDesBitsControle(donnees) - 1);
 	}
 
 	// Ajoute les bits de contrôle aux données et retourne les nouvelles données résultantes
-	uint16_t encoder(uint16_t donnees) {
-		uint16_t donneeAvecBitControle = 0;
+	uint32_t encoder(uint32_t donnees) {
+		uint32_t donneeAvecBitControle = 0;
 		int sizeCheck = 1;				// Le nombre de bit collé qu'on regarde pour calculer le bit de controlle
 		int puissance = 0;				// La puissance courrante de deux
 		int position = 0;				// La position courrante du bit dans les donnes avec bit de controlle
@@ -73,7 +73,7 @@ namespace Hamming {
 
 		// Ajoute des 0 où un bit de contrôle devrait aller
 		while (position < TRAME_SIZE) {
-			if ((position + 1) != pow(2, puissance)) {
+			if ((position + 1) != pow(2, puissance) || (position + 1) >= pow(2, NB_BIT_CONTROLE)) {
 				donneeAvecBitControle += getBit(donnees, positionOriginal) << position;
 				positionOriginal++;
 			}
@@ -99,15 +99,15 @@ namespace Hamming {
 	}
 
 	// Enlève les bits de contrôle aux données et retourne la trame original
-	uint16_t decoder(uint16_t donnees) {
-		uint16_t donneeSansBitControle = 0;
+	uint32_t decoder(uint32_t donnees) {
+		uint32_t donneeSansBitControle = 0;
 		int puissance = 0;				// La puissance courrante de deux
 		int position = 0;				// La position courrante du bit dans les donnes avec bit de controlle
 		int positionOriginal = 0;		// La position du bit dans les données originaux
 
 		// Construit les données originals en ignorant les position qui sont une puissance de (1, 2, 4, 8, ...)
 		while (position < TRAME_SIZE) {
-			if ((position + 1) != pow(2, puissance)) {
+			if ((position + 1) != pow(2, puissance) || (position + 1) >= pow(2, NB_BIT_CONTROLE)) {
 				donneeSansBitControle += getBit(donnees, position) << positionOriginal;
 				positionOriginal++;
 			}

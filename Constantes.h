@@ -1,10 +1,10 @@
 #pragma once
 
 // Le nombre de bits disponible dans une trame
-#define TRAME_SIZE 16											
+#define TRAME_SIZE 32											
 
 // Le nombre de bit de contrôle à ajouter pour Hamming (à recalculer si on modifie TRAME_SIZE)
-#define NB_BIT_CONTROLE 4										
+#define NB_BIT_CONTROLE 5										
 
 // Le nombre de bit alloué pour spécifier le type de la trame
 #define TYPE_SIZE 2
@@ -33,3 +33,4 @@
 #define TYPE_DONNEES 0
 #define TYPE_ACK 1
 #define TYPE_NAK 2
+#define TYPE_VALIDATED 3

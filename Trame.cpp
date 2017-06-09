@@ -1,38 +1,52 @@
 #include "Trame.h"
 
+Trame::Trame() {
+	setType(TYPE_VALIDATED);
+	setSequence(0);
+	setDonnees(0);
+}
+Trame::Trame(uint32_t c) {
+	contenu = c;
+}
+
+Trame::Trame(uint16_t type, uint16_t sequence, uint16_t donnees) {
+	setType(type);
+	setSequence(sequence);
+	setDonnees(donnees);
+}
 
 uint16_t Trame::getType() { 
-	return (contenu & ((UINT16_MAX >> (TRAME_SIZE - TYPE_SIZE)) << TYPE_POS)) >> TYPE_POS;
+	return (contenu & ((UINT32_MAX >> (TRAME_SIZE - TYPE_SIZE)) << TYPE_POS)) >> TYPE_POS;
 }
 
 uint16_t Trame::getSequence() {
-	return (contenu & ((UINT16_MAX >> (TRAME_SIZE - SEQ_SIZE)) << SEQ_POS)) >> SEQ_POS;
+	return (contenu & ((UINT32_MAX >> (TRAME_SIZE - SEQ_SIZE)) << SEQ_POS)) >> SEQ_POS;
 }
 
 uint16_t Trame::getDonnees() { 
-	return (contenu & ((UINT16_MAX >> (TRAME_SIZE - DONNEES_SIZE)) << DONNEES_POS)) >> DONNEES_POS;
+	return (contenu & ((UINT32_MAX >> (TRAME_SIZE - DONNEES_SIZE)) << DONNEES_POS)) >> DONNEES_POS;
 }
 
-uint16_t Trame::getContenu() {
+uint32_t Trame::getContenu() {
 	return contenu;
 }
 
-void Trame::setType(uint16_t type) {
+void Trame::setType(uint32_t type) {
 	type = type % (int) pow(2, TYPE_SIZE);
 	contenu = (type << TYPE_POS) + (getSequence() << SEQ_POS) + (getDonnees() << DONNEES_POS); 
 }
 
-void Trame::setSequence(uint16_t sequence) { 
+void Trame::setSequence(uint32_t sequence) { 
 	sequence = sequence % (int) pow(2, SEQ_SIZE);
 	contenu = (getType() << TYPE_POS) + (sequence << SEQ_POS) + (getDonnees() << DONNEES_POS);
 }
 
-void Trame::setDonnees(uint16_t donnees) { 
+void Trame::setDonnees(uint32_t donnees) { 
 	donnees = donnees % (int)pow(2, MESSAGE_SIZE_MAX);
 	contenu = (getType() << TYPE_POS) + (getSequence() << SEQ_POS) + (donnees << DONNEES_POS);
 }
 
-void Trame::setContenu(uint16_t c) {
+void Trame::setContenu(uint32_t c) {
 	c = c % (int) pow(2, TRAME_SIZE);
 	contenu = c;
 }
