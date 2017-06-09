@@ -49,7 +49,7 @@ struct Delai {
 };
 
 
-void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& connection) {
+void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, bool emetteur) {
 	uint16_t maxSeq = (int)pow(2, SEQ_SIZE);							// Le max de séquence, 2^3 = 8 (0 à 8)
 	TamponCirculaire tampon = TamponCirculaire(tailleTempon, maxSeq / 2);	// Le tampon, taille de tailleTampon, fenetre de 4
 	Delai delais[SEQ_SIZE];												// La array pour savoir s'il y a un timeout
@@ -58,7 +58,8 @@ void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& co
 	bool trameDoitEtreEnvoye = false;			// Si une trame ACK doit être envoyer à l'émetteur
 	uint16_t seqTrameNAKRecu;					// La séquence de la trame NAK recu, pour aller le chercher dans le tampon
 	Trame trameAEnvoyer;				// La trame ACK à envoyer, pour envoyer lorsque le support physique est libre
-
+	EntreeFichier entree = EntreeFichier(fichierEntree);
+	SortieFichier sortie = SortieFichier(fichierSortie);
 	int sequenceCourante = 0;					// La séquence courante, pour envoyer les trame en ordre
 
 	// Tant qu'on à pas fini d'envoyer 
@@ -97,6 +98,7 @@ void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& co
 			else {
 				connection.etatLiaison = EtatLiaison::FINI;		// Si le fichier est fini ou non valide, on a finit d'envoyer
 			}
+			break;
 		case EtatSupport::SUPPORT_ENVOYE:						// Si le support à envoyer quelque chose
 			Trame trame = connection.trame;
 			if (trame.getType() == TYPE_ACK) {					// Si la trame reçu est de type ACK
@@ -141,6 +143,8 @@ void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& co
 						tampon.ajouter(trame);
 					}
 				}
+
+				break;
 			}
 		}
 	}
@@ -148,43 +152,40 @@ void EmetterRecepteur(EntreeFichier entree, SortieFichier sortie, Connection& co
 
 void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
 	Trame transport; // variable temporaire utile juste pour l'insertion d'erreur
-	while (connectionT1.etatLiaison != EtatLiaison::ENVOYE || connectionT2.etatLiaison != EtatLiaison::ENVOYE || connectionT1.etatLiaison != EtatLiaison::FINI) {
-		this_thread::sleep_for(std::chrono::seconds(1));
-	} 
 
-	if (connectionT1.etatLiaison == EtatLiaison::ENVOYE) {
-		connectionT1.etatSupport = EtatSupport::UTILISE;
-		{
-			lock_guard<mutex> av(mutexT1);
-			transport = connectionT1.trame;
+	while (connectionT1.etatLiaison != FINI) {
+		if (connectionT1.etatLiaison == EtatLiaison::ENVOYE) {
+			connectionT1.etatSupport = EtatSupport::UTILISE;
+			{
+				lock_guard<mutex> av(mutexT1);
+				transport = connectionT1.trame;
+			}
+			// Insertion d'erreur ICI
+			{
+				lock_guard<mutex> av(mutexT3);
+				connectionT2.trame = transport;
+				connectionT2.etatSupport = EtatSupport::SUPPORT_ENVOYE;
+			}
 		}
-		// Insertion d'erreur ICI
-		{
-			lock_guard<mutex> av(mutexT3);
-			connectionT2.trame = transport;
-			connectionT2.etatSupport = EtatSupport::SUPPORT_ENVOYE;
+		else if (connectionT2.etatLiaison == EtatLiaison::ENVOYE) {
+			connectionT2.etatSupport = EtatSupport::UTILISE;
+			{
+				lock_guard<mutex> av(mutexT1);
+				transport = connectionT2.trame;
+			}
+			// Insertion d'erreur ICI
+			{
+				lock_guard<mutex> av(mutexT3);
+				connectionT1.trame = transport;
+				connectionT1.etatSupport = EtatSupport::SUPPORT_ENVOYE;
+			}
 		}
+
+		connectionT1.etatSupport = EtatSupport::PAS_UTILISE;
+		connectionT2.etatSupport = EtatSupport::PAS_UTILISE;
 	}
-	else if (connectionT2.etatLiaison == EtatLiaison::ENVOYE) {
-		connectionT2.etatSupport = EtatSupport::UTILISE;
-		{
-			lock_guard<mutex> av(mutexT1);
-			transport = connectionT2.trame;
-		}
-		// Insertion d'erreur ICI
-		{
-			lock_guard<mutex> av(mutexT3);
-			connectionT1.trame = transport;
-			connectionT1.etatSupport = EtatSupport::SUPPORT_ENVOYE;
-		}
-	}
-	else {
-		// quand connection.etat == FINI
-		return;
-	}
-	connectionT1.etatSupport = EtatSupport::PAS_UTILISE;
-	connectionT2.etatSupport = EtatSupport::PAS_UTILISE;
-	supportTransmission(connectionT1,connectionT2);
+	
+	//supportTransmission(connectionT1,connectionT2);
 }
 
 int main()
@@ -219,19 +220,20 @@ int main()
 
 	EtatLiaison etatL1 = EtatLiaison::VIDE;
 	EtatLiaison etatL2 = EtatLiaison::VIDE;
-	EtatSupport etatS = EtatSupport::PAS_UTILISE;
-	Connection connection1 = { etatL1, etatS, Trame(TYPE_VALIDATED, 0, 0) };
-	Connection connection2 = { etatL2, etatS, Trame(TYPE_VALIDATED, 0, 0) };
+	EtatSupport etatS1 = EtatSupport::PAS_UTILISE;
+	EtatSupport etatS2 = EtatSupport::PAS_UTILISE;
+	Connection connection1 = { etatL1, etatS1, Trame(TYPE_VALIDATED, 0, 0) };
+	Connection connection2 = { etatL2, etatS2, Trame(TYPE_VALIDATED, 0, 0) };
 	
 	EntreeFichier entreeFichier = EntreeFichier(fichierACopier);
 
-	std::thread th1(EmetterRecepteur, entreeFichier, SortieFichier(""), connection1);
-	/*std::thread th2(supportTransmission, connection1, connection2);
-	std::thread th3(EmetterRecepteur, EntreeFichier(""), SortieFichier(fichierDestination), connection2);
+	std::thread th1(EmetterRecepteur, fichierACopier, "", connection1, true);
+	std::thread th2(supportTransmission, connection1, connection2);
+	std::thread th3(EmetterRecepteur, "", fichierDestination, connection2, false);
 
 	th1.join();
 	th2.join();
-	th3.join();*/
+	th3.join();
 
 	system("pause");
 }
