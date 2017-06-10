@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <map>
 #include <thread>
 #include <bitset>
 #include <mutex> 
@@ -21,10 +22,12 @@ void afficher(const string s);
 
 size_t	tailleTempon;
 int		delaiTemporisation;
+int numeroTrame;		//utilisée pour identifier les trames et incorporer les erreurs
 string	fichierACopier;
 string	fichierDestination;
-mutex m;		// pour interdit l'ecriture en meme temps entre thread emission && supportTransmission
+mutex m;		// pour interdit l'ecriture en meme entre thread emission && supportTransmission
 mutex a;        // pour interdit l'ecriture en meme temps pour l'affichge
+map<int, int> erreurs;
 
 enum EtatLiaison {
     PAS_UTILISE, FINI, ENVOY_T1, ENVOY_T2, RECEPTION_T1, RECEPTION_T2
@@ -48,6 +51,17 @@ struct Delai {
     chrono::high_resolution_clock::time_point tempsDebut;
     bool verifie;
 };
+
+map<int, int> lireFichierErreurs(const string& nomFichierErreurs) {
+	map<int, int> listeErreurs;
+	ifstream ifs{ nomFichierErreurs };
+
+	for (string s; ifs >> s; ) {
+		std::pair<int, int> erreur = std::pair<int, int>(std::stoi(s.substr(0, s.find(":"))), std::stoi(s.substr(s.find(":") + 1, s.length())));
+		listeErreurs.emplace(erreur);
+	}
+	return listeErreurs;
+}
 
 void envoyerTrame(Connection& connection, Trame& trame, bool emetteur) {
     lock_guard<mutex> av(m);
@@ -90,8 +104,8 @@ void obtenirEtatLiaison(Connection& connection, bool emetteur) {
     }
 }
 
-
 void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, bool emetteur) {
+	numeroTrame = 0;
     uint16_t maxSeq = (int)pow(2, SEQ_SIZE);							// Le max de séquence, 2^3 = 8 (0 à 8)
     TamponCirculaire tampon = TamponCirculaire(tailleTempon, maxSeq / 2);	// Le tampon, taille de tailleTampon, fenetre de 4
     Delai delais[SEQ_SIZE];												// La array pour savoir s'il y a un timeout
@@ -197,16 +211,35 @@ void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
 
     while (connectionT1.etatLiaison != FINI) {
         if (connectionT1.etatLiaison == EtatLiaison::ENVOY_T1) {
-            lock_guard<mutex> av(m);
-            // Insertion d'erreur ICI
-            afficherCommentaireEtTrame("T1->T2 :", connectionT1.trame);
+
+			lock_guard<mutex> av(m);
+			afficherCommentaireEtTrame("T1->T2 :", connectionT1.trame);
+
+			if (erreurs.count(numeroTrame) != 0) {
+				connectionT1.trame.flipBitAPosition(erreurs.at(numeroTrame));
+				string logErreur = "insertion d'une erreur à la trame " + std::to_string(numeroTrame) + " a la position " + std::to_string(erreurs.at(numeroTrame));
+				afficher(logErreur);
+			}
+
             connectionT2.trame = connectionT1.trame;
             connectionT1.etatLiaison = EtatLiaison::RECEPTION_T2;
+
+			numeroTrame += 1;			// On incrémente le numéro de trame pour l'injection d'erreurs sur le support de transmission
+
         }
         else if (connectionT2.etatLiaison == EtatLiaison::ENVOY_T2) {
-            lock_guard<mutex> av(m);
-            // Insertion d'erreur ICI
-            afficherCommentaireEtTrame("T2->T1 :", connectionT2.trame);
+	
+			lock_guard<mutex> av(m);
+			afficherCommentaireEtTrame("T2->T1 :", connectionT2.trame);
+
+			if (erreurs.count(numeroTrame) != 0) {
+				connectionT1.trame.flipBitAPosition(erreurs.at(numeroTrame));
+				string logErreur = "insertion d'une erreur à la trame " + std::to_string(numeroTrame) + " a la position " + std::to_string(erreurs.at(numeroTrame));
+				afficher(logErreur);
+			}
+
+			numeroTrame += 1;			// On incrémente le numéro de trame pour l'injection d'erreurs sur le support de transmission
+            
             connectionT1.trame = connectionT2.trame;
             connectionT1.etatLiaison = EtatLiaison::RECEPTION_T1;
         }
@@ -240,6 +273,8 @@ int main()
         << "Delai de temporisation (ms): " << delaiTemporisation << endl
         << "Fichier a copier: " << fichierACopier << endl
         << "Fichier de destination: " << fichierDestination << endl << endl;
+
+	erreurs = lireFichierErreurs("erreurs.txt");
 
     // Un seul etat de liaison pour tout le programme (pour la sync) 
     // Est-ce que sa fait vraiment du sense que cette varaible soit dans la struct connection ... 
