@@ -1,4 +1,5 @@
 #include "EntreeFichier.h"
+#include <iostream>
 
 using namespace std;
 

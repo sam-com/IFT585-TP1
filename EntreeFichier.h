@@ -5,7 +5,7 @@ class EntreeFichier
 {
 private:
 	std::ifstream fichier;
-	bool valide;
+	bool valide = true;
 public:
 	EntreeFichier(std::string source);
 	EntreeFichier(const EntreeFichier&);
