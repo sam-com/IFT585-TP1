@@ -15,14 +15,16 @@
 #include "SortieFichier.h"
 using namespace std;
 
-#define TrameTaille 16
+
+void afficherCommentaireEtTrame(const string s, Trame); // Utiliser afficher une string avec de la sync et une trame 
+void afficher(const string s);
 
 size_t	tailleTempon;
 int		delaiTemporisation;
 string	fichierACopier;
 string	fichierDestination;
-mutex m;		// pour interdit l'ecriture en meme entre thread emission && supportTransmission
-
+mutex m;		// pour interdit l'ecriture en meme temps entre thread emission && supportTransmission
+mutex a;        // pour interdit l'ecriture en meme temps pour l'affichge
 
 enum EtatLiaison {
     PAS_UTILISE, FINI, ENVOY_T1, ENVOY_T2, RECEPTION_T1, RECEPTION_T2
@@ -50,10 +52,6 @@ struct Delai {
 void envoyerTrame(Connection& connection, Trame& trame, bool emetteur) {
     lock_guard<mutex> av(m);
 
-    string tmp = emetteur ? "emmeteur" : "recepteur";
-    cout << "Envoye " << tmp << endl;
-    trame.print();
-
     connection.trame = trame;		// On met la trame à envoyer dans la connexion
     if (emetteur) {
         connection.etatLiaison = EtatLiaison::ENVOY_T1;	// On change l'état de liaison pour "trame envoye"
@@ -61,17 +59,35 @@ void envoyerTrame(Connection& connection, Trame& trame, bool emetteur) {
     else {
         connection.etatLiaison = EtatLiaison::ENVOY_T2;	// On change l'état de liaison pour "trame envoye"
     }
+
+    string tmp = emetteur ? "emmeteur" : "recepteur";
+    afficherCommentaireEtTrame("Envoye " + tmp + " :", connection.trame);
 }
 
 Trame recevoirTrame(Connection& connection, bool emetteur) {
     lock_guard<mutex> av(m);
 
     string tmp = emetteur ? "emmeteur" : "recepteur";
-    cout << "Recu " << tmp << endl;
-    connection.trame.print();
+    afficherCommentaireEtTrame("Recu " + tmp + " :", connection.trame);
 
     connection.etatLiaison = EtatLiaison::PAS_UTILISE;
     return connection.trame;
+}
+
+void obtenirEtatLiaison(Connection& connection, bool emetteur) {
+    lock_guard<mutex> av(m);
+    if (connection.etatLiaison == EtatLiaison::PAS_UTILISE) {    // pret a envoyer
+        connection.etatSupport = EtatSupport::PRET_ENVOYER;
+    }
+    else if (emetteur && connection.etatLiaison == EtatLiaison::RECEPTION_T1) {
+        connection.etatSupport = EtatSupport::MESSAGE_RECU;
+    }
+    else if (!emetteur && connection.etatLiaison == EtatLiaison::RECEPTION_T2) {
+        connection.etatSupport = EtatSupport::MESSAGE_RECU;
+    }
+    else { // sinon il peut juste attendre .. 
+        connection.etatSupport = EtatSupport::ATTENTE;
+    }
 }
 
 
@@ -92,27 +108,13 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
     // TODO: Pas tester et fait très rapidement, la condition du while est surement pas bonne, quant est-il du récepteur?
     // C'est quand qu'il à finit?
     while (connection.etatLiaison != EtatLiaison::FINI) {
-        if (connection.etatLiaison == EtatLiaison::PAS_UTILISE) {    // pret a envoyer
-            connection.etatSupport = EtatSupport::PRET_ENVOYER;
-        }
-        else if (emetteur && connection.etatLiaison == EtatLiaison::RECEPTION_T1) {
-            connection.etatSupport = EtatSupport::MESSAGE_RECU;
-        }
-        else if (!emetteur && connection.etatLiaison == EtatLiaison::RECEPTION_T2) {
-            connection.etatSupport = EtatSupport::MESSAGE_RECU;
-        }
-        else { // sinon il peut juste attendre .. 
-            connection.etatSupport = EtatSupport::ATTENTE;
-        }
-
+        obtenirEtatLiaison(connection, emetteur); // mets la bonne etat de liasion dans la connection
         switch (connection.etatSupport) {		// Selon l'état du support
         case EtatSupport::PRET_ENVOYER:			// Si on peut envoyer sur le support
             if (trameNakRecu) {					// Si on avait recu un NAK
                 Trame trame = tampon.get(seqTrameNAKRecu);		// On va chercher la trame dans le tampon
                 delais[sequenceCourante].tempsDebut = chrono::high_resolution_clock::now();	// On start un timer pour la trame
                 delais[sequenceCourante].verifie = false;
-                //    connection.trame = trame;						// On met la trame à envoyer dans la connexion
-               //     connection.etatLiaison = EtatLiaison::ENVOYE;	// On change l'état de liaison pour "trame envoye"
                 envoyerTrame(connection, trame, emetteur);
                 trameNakRecu = false;
             }
@@ -131,8 +133,6 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
                     tampon.ajouter(trame);			// On l'ajoute dans le tampon
                     delais[sequenceCourante].tempsDebut = chrono::high_resolution_clock::now();	// On start un timer pour la trame
                     delais[sequenceCourante].verifie = false;
-                    // connection.trame = trame;
-                    // connection.etatLiaison = EtatLiaison::ENVOYE;
                     envoyerTrame(connection, trame, emetteur);
                     sequenceCourante = (sequenceCourante + 1) % maxSeq;	// On incrémente la séquence (doit être entre 0 et 7)*/
                 }
@@ -197,18 +197,18 @@ void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
 
     while (connectionT1.etatLiaison != FINI) {
         if (connectionT1.etatLiaison == EtatLiaison::ENVOY_T1) {
+            lock_guard<mutex> av(m);
             // Insertion d'erreur ICI
-            cout << "T1 -> T2 :" << endl;
-            connectionT1.trame.print();
+            afficherCommentaireEtTrame("T1->T2 :", connectionT1.trame);
             connectionT2.trame = connectionT1.trame;
             connectionT1.etatLiaison = EtatLiaison::RECEPTION_T2;
         }
         else if (connectionT2.etatLiaison == EtatLiaison::ENVOY_T2) {
+            lock_guard<mutex> av(m);
             // Insertion d'erreur ICI
-            cout << "T2 -> T1 :" << endl;
-            connectionT2.trame.print();
+            afficherCommentaireEtTrame("T2->T1 :", connectionT2.trame);
             connectionT1.trame = connectionT2.trame;
-            connectionT2.etatLiaison = EtatLiaison::RECEPTION_T1;
+            connectionT1.etatLiaison = EtatLiaison::RECEPTION_T1;
         }
     }
 }
@@ -258,7 +258,30 @@ int main()
 
     th1.join();
     th2.join();
-    //  th3.join();
+    th3.join();
 
     system("pause");
+}
+
+void afficherCommentaireEtTrame(const string s, Trame trame) {
+    lock_guard<mutex> vr{ a };
+    cout << s << " ( sequence :" << trame.getSequence() << ", type :";
+    if (trame.getType() == TYPE_ACK) {
+        cout << "ACK";
+    }
+    else if (trame.getType() == TYPE_NAK) {
+        cout << "NAK";
+    }
+    else {
+        cout << "DONNEES";
+    }
+    cout << ", donees :"
+        << trame.getDonnees()
+        << ")"
+        << endl;
+}
+
+void afficher(const string s) {
+    lock_guard<mutex> vr{ a };
+    cout << s << endl;
 }
