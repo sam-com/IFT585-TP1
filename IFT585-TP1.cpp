@@ -104,9 +104,6 @@ void obtenirEtatLiaison(Connection& connection, bool emetteur) {
     }
 }
 
-
-
-
 void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, bool emetteur) {
 	numeroTrame = 0;
     uint16_t maxSeq = (int)pow(2, SEQ_SIZE);							// Le max de séquence, 2^3 = 8 (0 à 8)
@@ -231,6 +228,7 @@ void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
 
         }
         else if (connectionT2.etatLiaison == EtatLiaison::ENVOY_T2) {
+	
 			lock_guard<mutex> av(m);
 			afficherCommentaireEtTrame("T2->T1 :", connectionT2.trame);
 
