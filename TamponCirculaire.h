@@ -23,9 +23,9 @@ private :
 public :
 	TamponCirculaire(int taille, int tailleFenetre);
 	bool ajouter(Trame t);
-	void enlever();
-	bool estPlein();
-	bool estVide();
+	//void enlever();
+	//bool estPlein();
+	//bool estVide();
 	bool peutInserer(int seq);
 	//bool fenetrePlein();
 	//bool fenetreVide();
