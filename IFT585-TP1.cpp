@@ -73,7 +73,7 @@ for (string s; ifs >> s; ) {
 return listeErreurs;
 }
 
-void envoyerTrame(Connection& connection, Trame& trame, bool emetteur, string comment = "") {
+void envoyerTrame(Connection& connection, Trame& trame, bool emetteur) {
 	lock_guard<mutex> av(m);
 
 	connection.trame = trame;		// On met la trame à envoyer dans la connexion
@@ -85,15 +85,13 @@ void envoyerTrame(Connection& connection, Trame& trame, bool emetteur, string co
 	}
 
 	string tmp = emetteur ? "emmeteur" : "recepteur";
-	afficherCommentaireEtTrame("Envoye " + tmp + " (" + comment + ") :", connection.trame);
+	afficherCommentaireEtTrame("Envoye " + tmp, connection.trame);
 
 	connection.trame.setContenu(Hamming::encoder(connection.trame.getContenu()));
 }
 
-Trame recevoirTrame(Connection& connection, bool emetteur) {
+Trame recevoirTrame(Connection& connection) {
 	lock_guard<mutex> av(m);
-
-	string tmp = emetteur ? "emmeteur" : "recepteur";
 
 	connection.etatLiaison = EtatLiaison::PAS_UTILISE;
 	return connection.trame;
@@ -179,11 +177,11 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 				Trame trame = tampon.get(seqTrameNAKRecu);		// On va chercher la trame dans le tampon
 				delais[sequenceCourante].tempsDebut = chrono::high_resolution_clock::now();	// On start un timer pour la trame
 				delais[sequenceCourante].verifie = false;
-				envoyerTrame(connection, trame, emetteur, "du a NAK");
+				envoyerTrame(connection, trame, emetteur);
 				trameNakRecu = false;
 			}
 			else if (trameDoitEtreEnvoye) {					// Si une trame ACK doit être envoyer (la couche recepteur)
-				envoyerTrame(connection, trameAEnvoyer, emetteur, to_string(tampon.getSeqDebutFenetre()));
+				envoyerTrame(connection, trameAEnvoyer, emetteur);
 				trameDoitEtreEnvoye = false;
 			}
 			else if (delaiEchu(delais) != -1) {
@@ -193,7 +191,7 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 				}
 				Trame trame = tampon.get(seqEchu);								// On va chercher la trame dans le tampon
 				delais[seqEchu].tempsDebut = chrono::high_resolution_clock::now();
-				envoyerTrame(connection, trame, emetteur, "Delai echu");
+				envoyerTrame(connection, trame, emetteur);
 			}
 			else if (entree.isValid() && !entree.finFichierAtteint()) {	// Si cet station copiait un fichier
 																		// Si la fenetre nous permet d'envoyer une autre trame
@@ -209,7 +207,7 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 			}
 			break;
 		case EtatSupport::MESSAGE_RECU:       // Si le support à envoyer quelque chose
-			Trame trame = recevoirTrame(connection, emetteur);
+			Trame trame = recevoirTrame(connection);
 			string tmp = emetteur ? "emmeteur" : "recepteur";
 			bool erreurDetecter = detecter(trame);
 			if (!nakEnvoye && erreurDetecter && modeHamming == DETECTION) {
@@ -220,27 +218,28 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 			}
 			else {
 				if (!nakEnvoye && erreurDetecter && modeHamming == CORRECTION) {
-					afficher("Recu " + tmp + ", erreur détecté et correction d'erreur");
+					afficher("Recu " + tmp + ", erreur detecte et corrige");
 					corriger(trame);
 				}
 				decoder(trame);
 				afficherCommentaireEtTrame("Recu " + tmp + " :", trame);
-				if (!erreurDetecter && trame.getType() == TYPE_ACK) {					// Si la trame reçu est de type ACK
+				if ((!erreurDetecter || modeHamming == CORRECTION) && trame.getType() == TYPE_ACK) {					// Si la trame reçu est de type ACK
 					validateTrames(tampon, delais, trame.getSequence());
 					
 					if (entree.isValid() && entree.finFichierAtteint()) {
 						connection.etatLiaison = EtatLiaison::FINI;
 					}
 					else if (tampon.estDernierDeFenetre(trame.getSequence())) {	// Si la trame est le dernier de la fenetre
-						tampon.deplacerFenetre();							// On peu deplacer la fenetre (de taille fenetre position)
+						tampon.deplacerFenetre();								// On peu deplacer la fenetre (de taille fenetre position)
 					}
 				}
-				else if (!erreurDetecter && trame.getType() == TYPE_NAK) {					// Si la trame reçu est de type NAK
+				else if ((!erreurDetecter || modeHamming == CORRECTION) && trame.getType() == TYPE_NAK) {					// Si la trame reçu est de type NAK
 					delais[trame.getSequence()].verifie = true;				// On stop le timer (on va le repartir quand on va 
 					trameNakRecu = true;									// renvoyer la trame)
 					seqTrameNAKRecu = trame.getSequence();					// On indique qu'à la prochaine boucle on veut renvoyer la trame
 				}
-				else if (!erreurDetecter && trame.getType() == TYPE_DONNEES) {					// Si la trame reçu est de type DONNEES
+				else if ((!erreurDetecter || modeHamming == CORRECTION) && trame.getType() == TYPE_DONNEES) {					// Si la trame reçu est de type DONNEES
+					int c = trame.getSequence();
 					if (tampon.estDebutDeFenetre(trame.getSequence())) {	// Si la trame est la trame voulu (premiere de la fenetre)
 						nakEnvoye = false;
 						uint16_t lastSeq = trame.getSequence();				// La séquence du ACK à envoyer
@@ -248,8 +247,8 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 						if (sortie.isValid()) {								// Si on peut ecrire dans le fichier
 							sortie.send16Bits(trame.getDonnees());			// On envoie les données
 																			// Pour les trames deja dans le tampon (quand on recoit en désordre)
-							for (Trame &t : tampon.getListeTrameNonValideDansFenetre()) {
-								t.setType(TYPE_VALIDATED);					// On met a validated pour pouvoir remplacer plus tard
+							for (Trame& t : tampon.getListeTrameNonValideDansFenetre()) {
+								tampon.validerTrame(t.getSequence());		// On met a validated pour pouvoir remplacer plus tard
 								sortie.send16Bits(t.getDonnees());			// On envoi les données à la couche supérieur
 								lastSeq = t.getSequence();					// On prend la bonne séquence pour le ACK
 								nbDeplacementFenetre++;

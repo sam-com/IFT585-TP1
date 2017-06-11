@@ -36,7 +36,9 @@ int EntreeFichier::getNext16Bits() {
 	if (!fichier.eof()) {
 		retour = c << 8;
 		fichier.get(c);
-		retour += c;
+		if (!fichier.eof()) {
+			retour += c;
+		}
 	}
 	bool fi = fichier.eof();
 	return retour;

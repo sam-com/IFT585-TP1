@@ -29,7 +29,9 @@ void SortieFichier::send16Bits(uint16_t bits) {
 	uint8_t c = bits >> 8;
 	fichier << c;
 	c = bits;
-	fichier << c;
+	if (c != 0) {
+		fichier << c;
+	}
 }
 
 void SortieFichier::close() {

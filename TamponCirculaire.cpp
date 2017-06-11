@@ -107,21 +107,21 @@ void TamponCirculaire::deplacerFenetre(int nbPosition) {
 
 vector<Trame> TamponCirculaire::getListeTrameNonValideDansFenetre() {
     vector<Trame> tmp = vector<Trame>();
-    if (getSeqDebutFenetre() < fenetre.fin) {
+    if (fenetre.debut < fenetre.fin) {
         for (int i = fenetre.debut; i < std::min((int)v.size(), fenetre.fin); i++) {
-            if (v.at(i).getType() == TYPE_DONNEES) {
+            if (v.at(i).getType() != TYPE_VALIDATED) {
                 tmp.push_back(v.at(i));
             }
         }
     }
     else {
         for (int i = fenetre.debut; i < v.size(); i++) {
-            if (v.at(i).getType() == TYPE_DONNEES) {
+            if (v.at(i).getType() != TYPE_VALIDATED) {
                 tmp.push_back(v.at(i));
             }
         }
-        for (int i = fenetre.fin; i < fenetre.debut; i++) {
-            if (v.at(i).getType() == TYPE_DONNEES) {
+        for (int i = 0; i < fenetre.fin; i++) {
+            if (v.at(i).getType() != TYPE_VALIDATED) {
                 tmp.push_back(v.at(i));
             }
         }
