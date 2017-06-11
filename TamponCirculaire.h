@@ -35,6 +35,7 @@ public :
 	//bool fenetreVide();
 	bool estDebutDeFenetre(int seq);
 	uint16_t getSeqDebutFenetre();
+	uint16_t getSeqFinFenetre();
 	bool estDernierDeFenetre(int seq);
 	void validerTrame(int seq);
 	void deplacerFenetre();

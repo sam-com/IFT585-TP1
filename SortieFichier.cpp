@@ -33,7 +33,5 @@ void SortieFichier::send16Bits(uint16_t bits) {
 }
 
 void SortieFichier::close() {
-	if (isValid()) {
-		fichier.close();
-	}
+	fichier.close();
 }

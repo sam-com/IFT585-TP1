@@ -10,6 +10,7 @@
 #include <mutex> 
 #include <chrono>
 #include <iterator>
+#include <math.h>
 #include <algorithm>
 #include "TamponCirculaire.h"
 #include "EntreeFichier.h"
@@ -23,7 +24,7 @@ void afficherCommentaireEtTrame(const string s, Trame); // Utiliser afficher une
 void afficher(const string s);
 
 size_t	tailleTempon;
-int		delaiTemporisation;
+long long	delaiTemporisation;
 int numeroTrame;		//utilisée pour identifier les trames et incorporer les erreurs
 string	fichierACopier;
 string	fichierDestination;
@@ -32,7 +33,10 @@ mutex a;        // pour interdit l'ecriture en meme temps pour l'affichge
 TamponCirculaire tamponE;
 TamponCirculaire tamponR;
 map<int, int> erreurs;
-uint16_t maxSeq = (int)pow(2, SEQ_SIZE);
+
+enum ModeHamming {
+	DETECTION, CORRECTION
+};
 
 enum EtatLiaison {
 	PAS_UTILISE, FINI, ENVOY_T1, ENVOY_T2, RECEPTION_T1, RECEPTION_T2
@@ -48,6 +52,7 @@ struct Connection {
 	Trame& trame;
 };
 
+ModeHamming modeHamming;
 //Structure contenant le début du timer et s'il à déjà été vérifier (désactive le timer)
 struct Delai {
 	Delai() {
@@ -61,14 +66,14 @@ map<int, int> lireFichierErreurs(const string& nomFichierErreurs) {
 	map<int, int> listeErreurs;
 	ifstream ifs{ nomFichierErreurs };
 
-	for (string s; ifs >> s; ) {
-		std::pair<int, int> erreur = std::pair<int, int>(std::stoi(s.substr(0, s.find(":"))), std::stoi(s.substr(s.find(":") + 1, s.length())));
-		listeErreurs.emplace(erreur);
-	}
-	return listeErreurs;
+for (string s; ifs >> s; ) {
+	std::pair<int, int> erreur = std::pair<int, int>(std::stoi(s.substr(0, s.find(":"))), std::stoi(s.substr(s.find(":") + 1, s.length())));
+	listeErreurs.emplace(erreur);
+}
+return listeErreurs;
 }
 
-void envoyerTrame(Connection& connection, Trame& trame, bool emetteur) {
+void envoyerTrame(Connection& connection, Trame& trame, bool emetteur, string comment = "") {
 	lock_guard<mutex> av(m);
 
 	connection.trame = trame;		// On met la trame à envoyer dans la connexion
@@ -80,7 +85,8 @@ void envoyerTrame(Connection& connection, Trame& trame, bool emetteur) {
 	}
 
 	string tmp = emetteur ? "emmeteur" : "recepteur";
-	afficherCommentaireEtTrame("Envoye " + tmp + " :", connection.trame);
+	afficherCommentaireEtTrame("Envoye " + tmp + " (" + comment + ") :", connection.trame);
+
 	connection.trame.setContenu(Hamming::encoder(connection.trame.getContenu()));
 }
 
@@ -88,11 +94,28 @@ Trame recevoirTrame(Connection& connection, bool emetteur) {
 	lock_guard<mutex> av(m);
 
 	string tmp = emetteur ? "emmeteur" : "recepteur";
-	connection.trame.setContenu(Hamming::decoder(connection.trame.getContenu()));
-	afficherCommentaireEtTrame("Recu " + tmp + " :", connection.trame);
 
 	connection.etatLiaison = EtatLiaison::PAS_UTILISE;
 	return connection.trame;
+}
+
+
+bool detecter(Trame& trame) {
+	lock_guard<mutex> av(m);
+
+	return Hamming::detecter(trame.getContenu());
+}
+
+void corriger(Trame& trame) {
+	lock_guard<mutex> av(m);
+
+	trame.setContenu(Hamming::corriger(trame.getContenu()));
+}
+
+void decoder(Trame& trame) {
+	lock_guard<mutex> av(m);
+
+	trame.setContenu(Hamming::decoder(trame.getContenu()));
 }
 
 void obtenirEtatLiaison(Connection& connection, bool emetteur) {
@@ -111,22 +134,43 @@ void obtenirEtatLiaison(Connection& connection, bool emetteur) {
 	}
 }
 
-void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, TamponCirculaire& tampon, bool emetteur) {
+int delaiEchu(vector<Delai> d) {
+	int count = 0;
+	for (Delai delai : d) {
+		if (!delai.verifie && 
+			chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - delai.tempsDebut).count() > delaiTemporisation) {
+			return count;
+		}
+		count++;
+	}
+	return -1;
+}
+
+void validateTrames(TamponCirculaire& tampon, vector<Delai>& delais, uint16_t seq) {
+	uint16_t debut = tampon.getSeqDebutFenetre();
+	for (int i = debut; i <= seq; i++) {
+		tampon.validerTrame(i);
+		delais[i].verifie = true;
+	}
+}
+
+void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, bool emetteur) {
 	numeroTrame = 0;
-	//TamponCirculaire tampon = TamponCirculaire(tailleTempon, maxSeq / 2);	// Le tampon, taille de tailleTampon, fenetre de 4
-	Delai delais[SEQ_SIZE];												// La array pour savoir s'il y a un timeout
-																		// delais[2] = Delai de seq 2
+	uint16_t maxSeq = (int)pow(2, SEQ_SIZE);
+	TamponCirculaire tampon = TamponCirculaire(tailleTempon, maxSeq / 2);	// Le tampon, taille de tailleTampon, fenetre de 4
+	vector<Delai> delais = vector<Delai>();		// La array pour savoir s'il y a un timeout
+	delais.resize((int)pow(2, SEQ_SIZE));		// delais[2] = Delai de seq 2
+
 	bool trameNakRecu = false;					// Si une trame NAK à été recu, donc on doit l'envoyer un priorité prochaine boucle
 	bool trameDoitEtreEnvoye = false;			// Si une trame ACK doit être envoyer à l'émetteur
+	bool nakEnvoye = false;
 	uint16_t seqTrameNAKRecu;					// La séquence de la trame NAK recu, pour aller le chercher dans le tampon
-	Trame trameAEnvoyer;				// La trame ACK à envoyer, pour envoyer lorsque le support physique est libre
+	Trame trameAEnvoyer;						// La trame ACK à envoyer, pour envoyer lorsque le support physique est libre
 	EntreeFichier entree = EntreeFichier(fichierEntree);
 	SortieFichier sortie = SortieFichier(fichierSortie);
 	int sequenceCourante = 0;					// La séquence courante, pour envoyer les trame en ordre
 
-												// Tant qu'on à pas fini d'envoyer 
-												// TODO: Pas tester et fait très rapidement, la condition du while est surement pas bonne, quant est-il du récepteur?
-												// C'est quand qu'il à finit?
+	// Tant qu'on à pas fini d'envoyer 
 	while (connection.etatLiaison != EtatLiaison::FINI) {
 		obtenirEtatLiaison(connection, emetteur); // mets la bonne etat de liasion dans la connection
 		switch (connection.etatSupport) {		// Selon l'état du support
@@ -135,16 +179,22 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 				Trame trame = tampon.get(seqTrameNAKRecu);		// On va chercher la trame dans le tampon
 				delais[sequenceCourante].tempsDebut = chrono::high_resolution_clock::now();	// On start un timer pour la trame
 				delais[sequenceCourante].verifie = false;
-				envoyerTrame(connection, trame, emetteur);
+				envoyerTrame(connection, trame, emetteur, "du a NAK");
 				trameNakRecu = false;
 			}
 			else if (trameDoitEtreEnvoye) {					// Si une trame ACK doit être envoyer (la couche recepteur)
-															//  connection.trame = trameAEnvoyer;
-															//   connection.etatLiaison = EtatLiaison::ENVOYE;
-				envoyerTrame(connection, trameAEnvoyer, emetteur);
+				envoyerTrame(connection, trameAEnvoyer, emetteur, to_string(tampon.getSeqDebutFenetre()));
 				trameDoitEtreEnvoye = false;
 			}
-			// TIMEOUT else if ()								// Si une trame n'a pas eu de ACK apres un certain temps
+			else if (delaiEchu(delais) != -1) {
+				uint16_t seqEchu = delaiEchu(delais);
+				if (seqEchu == 0) {
+					cout << "twf";
+				}
+				Trame trame = tampon.get(seqEchu);								// On va chercher la trame dans le tampon
+				delais[seqEchu].tempsDebut = chrono::high_resolution_clock::now();
+				envoyerTrame(connection, trame, emetteur, "Delai echu");
+			}
 			else if (entree.isValid() && !entree.finFichierAtteint()) {	// Si cet station copiait un fichier
 																		// Si la fenetre nous permet d'envoyer une autre trame
 				if (tampon.peutInserer(sequenceCourante)) {
@@ -154,60 +204,75 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 					delais[sequenceCourante].tempsDebut = chrono::high_resolution_clock::now();	// On start un timer pour la trame
 					delais[sequenceCourante].verifie = false;
 					envoyerTrame(connection, trame, emetteur);
-					sequenceCourante = (sequenceCourante + 1) % maxSeq;	// On incrémente la séquence (doit être entre 0 et 7)*/
+					sequenceCourante = (sequenceCourante + 1) % maxSeq;	// On incrémente la séquence (doit être entre 0 et 7)
 				}
-			}
-			else if (emetteur) {
-				connection.etatLiaison = EtatLiaison::FINI;		// Si le fichier est fini ou non valide, on a finit d'envoyer
 			}
 			break;
 		case EtatSupport::MESSAGE_RECU:       // Si le support à envoyer quelque chose
 			Trame trame = recevoirTrame(connection, emetteur);
-			if (trame.getType() == TYPE_ACK) {					// Si la trame reçu est de type ACK
-				delais[trame.getSequence()].verifie = true;			// On arrête le timer
-				tampon.validerTrame(trame.getSequence());			// Met le type de trame a VALIDATED
-				if (tampon.estDernierDeFenetre(trame.getSequence())) {	// Si la trame est le dernier de la fenetre
-					tampon.deplacerFenetre();							// On peu deplacer la fenetre (de taille fenetre position)
+			string tmp = emetteur ? "emmeteur" : "recepteur";
+			bool erreurDetecter = detecter(trame);
+			if (!nakEnvoye && erreurDetecter && modeHamming == DETECTION) {
+				afficher("Recu " + tmp + ", erreur detecte");
+				trameDoitEtreEnvoye = true;
+				trameAEnvoyer = Trame(TYPE_NAK, tampon.getSeqDebutFenetre(), 0);
+				nakEnvoye = true;
+			}
+			else {
+				if (!nakEnvoye && erreurDetecter && modeHamming == CORRECTION) {
+					afficher("Recu " + tmp + ", erreur détecté et correction d'erreur");
+					corriger(trame);
 				}
-			}
-			else if (trame.getType() == TYPE_NAK) {					// Si la trame reçu est de type NAK
-				delais[trame.getSequence()].verifie = true;				// On stop le timer (on va le repartir quand on va 
-				trameNakRecu = true;									// renvoyer la trame)
-				seqTrameNAKRecu = trame.getSequence();					// On indique qu'à la prochaine boucle on veut renvoyer la trame
-			}
-			else if (trame.getType() == TYPE_DONNEES) {					// Si la trame reçu est de type DONNEES
-																		// TODO CORRECTION/DETECTION DERREUR selon le mode en paramètre
-				if (tampon.estDebutDeFenetre(trame.getSequence())) {	// Si la trame est la trame voulu (premiere de la fenetre)
-					uint16_t lastSeq = trame.getSequence();				// La séquence du ACK à envoyer
-					uint16_t nbDeplacementFenetre = 1;					// Le nombre de position que la fenêtre doit être déplacé
-					if (sortie.isValid()) {								// Si on peut ecrire dans le fichier
-						sortie.send16Bits(trame.getDonnees());			// On envoie les données
-																		// Pour les trames deja dans le tampon (quand on recoit en désordre)
-						for (Trame &t : tampon.getListeTrameNonValideDansFenetre()) {
-							t.setType(TYPE_VALIDATED);					// On met a validated pour pouvoir remplacer plus tard
-							sortie.send16Bits(t.getDonnees());			// On envoi les données à la couche supérieur
-							lastSeq = t.getSequence();					// On prend la bonne séquence pour le ACK
-							nbDeplacementFenetre++;
+				decoder(trame);
+				afficherCommentaireEtTrame("Recu " + tmp + " :", trame);
+				if (!erreurDetecter && trame.getType() == TYPE_ACK) {					// Si la trame reçu est de type ACK
+					validateTrames(tampon, delais, trame.getSequence());
+					
+					if (entree.isValid() && entree.finFichierAtteint()) {
+						connection.etatLiaison = EtatLiaison::FINI;
+					}
+					else if (tampon.estDernierDeFenetre(trame.getSequence())) {	// Si la trame est le dernier de la fenetre
+						tampon.deplacerFenetre();							// On peu deplacer la fenetre (de taille fenetre position)
+					}
+				}
+				else if (!erreurDetecter && trame.getType() == TYPE_NAK) {					// Si la trame reçu est de type NAK
+					delais[trame.getSequence()].verifie = true;				// On stop le timer (on va le repartir quand on va 
+					trameNakRecu = true;									// renvoyer la trame)
+					seqTrameNAKRecu = trame.getSequence();					// On indique qu'à la prochaine boucle on veut renvoyer la trame
+				}
+				else if (!erreurDetecter && trame.getType() == TYPE_DONNEES) {					// Si la trame reçu est de type DONNEES
+					if (tampon.estDebutDeFenetre(trame.getSequence())) {	// Si la trame est la trame voulu (premiere de la fenetre)
+						nakEnvoye = false;
+						uint16_t lastSeq = trame.getSequence();				// La séquence du ACK à envoyer
+						uint16_t nbDeplacementFenetre = 1;					// Le nombre de position que la fenêtre doit être déplacé
+						if (sortie.isValid()) {								// Si on peut ecrire dans le fichier
+							sortie.send16Bits(trame.getDonnees());			// On envoie les données
+																			// Pour les trames deja dans le tampon (quand on recoit en désordre)
+							for (Trame &t : tampon.getListeTrameNonValideDansFenetre()) {
+								t.setType(TYPE_VALIDATED);					// On met a validated pour pouvoir remplacer plus tard
+								sortie.send16Bits(t.getDonnees());			// On envoi les données à la couche supérieur
+								lastSeq = t.getSequence();					// On prend la bonne séquence pour le ACK
+								nbDeplacementFenetre++;
+							}
+						}
+
+						tampon.deplacerFenetre(nbDeplacementFenetre);
+						trameDoitEtreEnvoye = true;
+						trameAEnvoyer = Trame(TYPE_ACK, lastSeq, 0);
+					}
+					// Si c'est pas la trame qu'on voulait, on doit envoyer un NAK
+					else {
+						// On indique qu'une trame doit être envoyer quand le support va etre libre
+						trameDoitEtreEnvoye = true;
+						trameAEnvoyer = Trame(TYPE_NAK, tampon.getSeqDebutFenetre(), 0);
+						// Si on pouvait l'insérer dans la fenetre, on l'insère
+						if (tampon.peutInserer(trame.getSequence())) {
+							tampon.ajouter(trame);
 						}
 					}
-
-					tampon.deplacerFenetre(nbDeplacementFenetre);
-					trameDoitEtreEnvoye = true;
-					trameAEnvoyer = Trame(TYPE_ACK, lastSeq, 0);
 				}
-				// Si c'est pas la trame qu'on voulait, on doit envoyer un NAK
-				else {
-					// On indique qu'une trame doit être envoyer quand le support va etre libre
-					trameDoitEtreEnvoye = true;
-					trameAEnvoyer = Trame(TYPE_NAK, tampon.getSeqDebutFenetre(), 0);
-					// Si on pouvait l'insérer dans la fenetre, on l'insère
-					if (tampon.peutInserer(trame.getSequence())) {
-						tampon.ajouter(trame);
-					}
-				}
-
-				break;
 			}
+			break;
 		}
 	}
 
@@ -259,8 +324,6 @@ int main()
 {
 	ifstream fichierParametres;
 	fichierParametres.open("parametres.txt");
-	Trame trame = Trame(TYPE_DONNEES, 1, 8);
-	trame.print();
 
 	bool valide = true;
 	string line;
@@ -269,6 +332,7 @@ int main()
 		delaiTemporisation = getline(fichierParametres, line) ? atoi(line.c_str()) : -1;
 		fichierACopier = getline(fichierParametres, line) ? line : "";
 		fichierDestination = getline(fichierParametres, line) ? line.c_str() : "";
+		modeHamming = getline(fichierParametres, line) ? (line == "correction" ? CORRECTION : DETECTION) : DETECTION;
 
 		if (tailleTempon < 1 || delaiTemporisation <= 0 || fichierACopier.empty() || fichierDestination.empty()) {
 			valide = false;
@@ -294,14 +358,9 @@ int main()
 	Connection connection1 = { etatL, etatS1, Trame(TYPE_VALIDATED, 0, 0) };
 	Connection connection2 = { etatL, etatS2, Trame(TYPE_VALIDATED, 0, 0) };
 
-	EntreeFichier entreeFichier = EntreeFichier(fichierACopier);
-
-	tamponE = TamponCirculaire(tailleTempon, maxSeq / 2);
-	tamponR = TamponCirculaire(tailleTempon, maxSeq / 2);
-
-	std::thread th1(EmetterRecepteur, fichierACopier, "", connection1, tamponE, true);
+	std::thread th1(EmetterRecepteur, fichierACopier, "", connection1, true);
 	std::thread th2(supportTransmission, connection1, connection2);
-	std::thread th3(EmetterRecepteur, "", fichierDestination, connection2, tamponR, false);
+	std::thread th3(EmetterRecepteur, "", fichierDestination, connection2, false);
 
 	th1.join();
 	th2.join();
@@ -322,10 +381,11 @@ void afficherCommentaireEtTrame(const string s, Trame trame) {
 	else {
 		cout << "DONNEES";
 	}
-	cout << ", donees :"
-		<< trame.getDonnees()
-		<< ")"
-		<< endl;
+	cout << ", donnees :";
+	uint16_t donnees = trame.getDonnees();
+	cout	<< (char) (donnees >> 8)
+			<< (char) donnees
+			<< endl;
 }
 
 void afficher(const string s) {

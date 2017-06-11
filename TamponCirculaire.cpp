@@ -19,6 +19,8 @@ TamponCirculaire::TamponCirculaire(int taille, int tailleFenetre) : v(taille), d
 }
 
 TamponCirculaire::~TamponCirculaire() {
+	v.clear();
+	v.resize(0);
 }
 
 /*void TamponCirculaire::augmenter(int& i) {
@@ -71,6 +73,11 @@ uint16_t TamponCirculaire::getSeqDebutFenetre() {
     return fenetre.debutSeq;
 }
 
+uint16_t TamponCirculaire::getSeqFinFenetre() {
+	uint16_t maxSeq = (int)std::pow(2, SEQ_SIZE);
+	return fin = (fenetre.debutSeq + fenetre.taille) % maxSeq;
+}
+
 bool TamponCirculaire::estDernierDeFenetre(int seq) {
 	uint16_t maxSeq = (int)std::pow(2, SEQ_SIZE);
 	uint16_t fin = (fenetre.debutSeq + fenetre.taille) % maxSeq;
@@ -100,7 +107,7 @@ void TamponCirculaire::deplacerFenetre(int nbPosition) {
 
 vector<Trame> TamponCirculaire::getListeTrameNonValideDansFenetre() {
     vector<Trame> tmp = vector<Trame>();
-    if (fenetre.debut < fenetre.fin) {
+    if (getSeqDebutFenetre() < fenetre.fin) {
         for (int i = fenetre.debut; i < std::min((int)v.size(), fenetre.fin); i++) {
             if (v.at(i).getType() == TYPE_DONNEES) {
                 tmp.push_back(v.at(i));

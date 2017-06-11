@@ -41,7 +41,7 @@ namespace Hamming {
 		bool valeur = false;
 
 		// Pour tous les bits de contrôle
-		while (positionBitControle < (TRAME_SIZE - 1)) {
+		while (puissance < NB_BIT_CONTROLE && positionBitControle < (TRAME_SIZE - 1)) {
 			positionBitControle = pow(2, puissance) - 1;
 			valeur = getValeurBitControle(donnees, positionBitControle);
 			resultat += valeur << puissance;
