@@ -29,7 +29,10 @@ string	fichierACopier;
 string	fichierDestination;
 mutex m;		// pour interdit l'ecriture en meme entre thread emission && supportTransmission
 mutex a;        // pour interdit l'ecriture en meme temps pour l'affichge
+TamponCirculaire tamponE;
+TamponCirculaire tamponR;
 map<int, int> erreurs;
+uint16_t maxSeq = (int)pow(2, SEQ_SIZE);
 
 enum EtatLiaison {
 	PAS_UTILISE, FINI, ENVOY_T1, ENVOY_T2, RECEPTION_T1, RECEPTION_T2
@@ -108,10 +111,9 @@ void obtenirEtatLiaison(Connection& connection, bool emetteur) {
 	}
 }
 
-void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, bool emetteur) {
+void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& connection, TamponCirculaire& tampon, bool emetteur) {
 	numeroTrame = 0;
-	uint16_t maxSeq = (int)pow(2, SEQ_SIZE);							// Le max de séquence, 2^3 = 8 (0 à 8)
-	TamponCirculaire tampon = TamponCirculaire(tailleTempon, maxSeq / 2);	// Le tampon, taille de tailleTampon, fenetre de 4
+	//TamponCirculaire tampon = TamponCirculaire(tailleTempon, maxSeq / 2);	// Le tampon, taille de tailleTampon, fenetre de 4
 	Delai delais[SEQ_SIZE];												// La array pour savoir s'il y a un timeout
 																		// delais[2] = Delai de seq 2
 	bool trameNakRecu = false;					// Si une trame NAK à été recu, donc on doit l'envoyer un priorité prochaine boucle
@@ -164,7 +166,6 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 			if (trame.getType() == TYPE_ACK) {					// Si la trame reçu est de type ACK
 				delais[trame.getSequence()].verifie = true;			// On arrête le timer
 				tampon.validerTrame(trame.getSequence());			// Met le type de trame a VALIDATED
-				cout << "Envoi de ack " << trame.getSequence() << " par recepteur";
 				if (tampon.estDernierDeFenetre(trame.getSequence())) {	// Si la trame est le dernier de la fenetre
 					tampon.deplacerFenetre();							// On peu deplacer la fenetre (de taille fenetre position)
 				}
@@ -221,7 +222,7 @@ void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
 		if (connectionT1.etatLiaison == EtatLiaison::ENVOY_T1) {
 
 			lock_guard<mutex> av(m);
-			afficherCommentaireEtTrame("T1->T2 :", connectionT1.trame);
+			//afficherCommentaireEtTrame("T1->T2 :", connectionT1.trame);
 
 			if (erreurs.count(numeroTrame) != 0) {
 				connectionT1.trame.flipBitAPosition(erreurs.at(numeroTrame));
@@ -238,7 +239,7 @@ void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
 		else if (connectionT2.etatLiaison == EtatLiaison::ENVOY_T2) {
 
 			lock_guard<mutex> av(m);
-			afficherCommentaireEtTrame("T2->T1 :", connectionT2.trame);
+			//afficherCommentaireEtTrame("T2->T1 :", connectionT2.trame);
 
 			if (erreurs.count(numeroTrame) != 0) {
 				connectionT2.trame.flipBitAPosition(erreurs.at(numeroTrame));
@@ -295,9 +296,12 @@ int main()
 
 	EntreeFichier entreeFichier = EntreeFichier(fichierACopier);
 
-	std::thread th1(EmetterRecepteur, fichierACopier, "", connection1, true);
+	tamponE = TamponCirculaire(tailleTempon, maxSeq / 2);
+	tamponR = TamponCirculaire(tailleTempon, maxSeq / 2);
+
+	std::thread th1(EmetterRecepteur, fichierACopier, "", connection1, tamponE, true);
 	std::thread th2(supportTransmission, connection1, connection2);
-	std::thread th3(EmetterRecepteur, "", fichierDestination, connection2, false);
+	std::thread th3(EmetterRecepteur, "", fichierDestination, connection2, tamponR, false);
 
 	th1.join();
 	th2.join();

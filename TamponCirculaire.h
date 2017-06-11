@@ -25,6 +25,7 @@ private :
 public :
 	TamponCirculaire();
 	TamponCirculaire(int taille, int tailleFenetre);
+	~TamponCirculaire();
 	bool ajouter(Trame t);
 	//void enlever();
 	//bool estPlein();

@@ -18,6 +18,9 @@ TamponCirculaire::TamponCirculaire(int taille, int tailleFenetre) : v(taille), d
 	fenetre.debutSeq = 0;
 }
 
+TamponCirculaire::~TamponCirculaire() {
+}
+
 /*void TamponCirculaire::augmenter(int& i) {
     i == v.size() - 1 ? i = 0 : ++i;
 }*/
