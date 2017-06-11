@@ -186,9 +186,6 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 			}
 			else if (delaiEchu(delais) != -1) {
 				uint16_t seqEchu = delaiEchu(delais);
-				if (seqEchu == 0) {
-					cout << "twf";
-				}
 				Trame trame = tampon.get(seqEchu);								// On va chercher la trame dans le tampon
 				delais[seqEchu].tempsDebut = chrono::high_resolution_clock::now();
 				envoyerTrame(connection, trame, emetteur);
