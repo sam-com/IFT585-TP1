@@ -11,7 +11,8 @@ SortieFichier::SortieFichier(string destination)
 	if (destination != "") {
 		fichier.open(destination);
 	}
-	else {
+
+	if (!fichier.is_open()) {
 		valide = false;
 	}
 }
@@ -29,4 +30,10 @@ void SortieFichier::send16Bits(uint16_t bits) {
 	fichier << c;
 	c = bits;
 	fichier << c;
+}
+
+void SortieFichier::close() {
+	if (isValid()) {
+		fichier.close();
+	}
 }

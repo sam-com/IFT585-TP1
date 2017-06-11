@@ -14,5 +14,6 @@ public:
 
 	bool isValid();
 	void send16Bits(uint16_t bits);
+	void close();
 };
 

@@ -3,11 +3,19 @@
 
 using namespace std;
 
+TamponCirculaire::TamponCirculaire() : v(0), debut(0), fin(0), size(0) {
+	fenetre = Fenetre();
+	fenetre.debut = 0;
+	fenetre.fin = 0;
+	fenetre.taille = 0;
+	fenetre.debutSeq = 0;
+}
 TamponCirculaire::TamponCirculaire(int taille, int tailleFenetre) : v(taille), debut(0), fin(0), size(0) {
     fenetre = Fenetre();
     fenetre.debut = 0;
     fenetre.fin = tailleFenetre;
     fenetre.taille = tailleFenetre;
+	fenetre.debutSeq = 0;
 }
 
 /*void TamponCirculaire::augmenter(int& i) {
@@ -15,9 +23,11 @@ TamponCirculaire::TamponCirculaire(int taille, int tailleFenetre) : v(taille), d
 }*/
 
 bool TamponCirculaire::peutInserer(int seq) {
-    return (((fenetre.debut <= seq) && (seq < fenetre.fin)) ||
-        ((fenetre.fin < fenetre.debut) && (fenetre.debut <= seq)) ||
-        ((seq < fenetre.fin) && (fenetre.fin < fenetre.debut)));
+	uint16_t debut = fenetre.debutSeq;
+	uint16_t fin = (fenetre.debutSeq + fenetre.taille) % ((int)std::pow(2, SEQ_SIZE));
+    return (((debut <= seq) && (seq < fin)) ||
+        ((fin < debut) && (debut <= seq)) ||
+        ((seq < fin) && (fin < debut)));
 }
 
 bool TamponCirculaire::ajouter(Trame t) {
@@ -51,19 +61,21 @@ bool TamponCirculaire::ajouter(Trame t) {
 }*/
 
 bool TamponCirculaire::estDebutDeFenetre(int seq) {
-    return fenetre.debut == seq;
+    return fenetre.debutSeq == seq;
 }
 
 uint16_t TamponCirculaire::getSeqDebutFenetre() {
-    return fenetre.debut;
+    return fenetre.debutSeq;
 }
 
 bool TamponCirculaire::estDernierDeFenetre(int seq) {
-    if (fenetre.fin == 0) {
-        return seq == (v.size() - 1);
+	uint16_t maxSeq = (int)std::pow(2, SEQ_SIZE);
+	uint16_t fin = (fenetre.debutSeq + fenetre.taille) % maxSeq;
+    if (fin == 0) {
+        return seq == (maxSeq - 1);
     }
     else {
-        return seq == (fenetre.fin - 1);
+        return seq == fin - 1;
     }
 }
 
@@ -74,11 +86,13 @@ void TamponCirculaire::validerTrame(int seq) {
 void TamponCirculaire::deplacerFenetre() {
     fenetre.debut = (fenetre.debut + fenetre.taille) % v.size();
     fenetre.fin = (fenetre.fin + fenetre.taille) % v.size();
+	fenetre.debutSeq = (fenetre.debutSeq + fenetre.taille) % ((int) std::pow(2, SEQ_SIZE));
 
 }
 void TamponCirculaire::deplacerFenetre(int nbPosition) {
     fenetre.debut = (fenetre.debut + nbPosition) % v.size();
     fenetre.fin = (fenetre.fin + nbPosition) % v.size();
+	fenetre.debutSeq = (fenetre.debutSeq + nbPosition) % ((int)std::pow(2, SEQ_SIZE));
 }
 
 vector<Trame> TamponCirculaire::getListeTrameNonValideDansFenetre() {

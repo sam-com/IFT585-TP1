@@ -14,5 +14,6 @@ public:
 	bool isValid();
 	int getNext16Bits();
 	bool finFichierAtteint();
+	void close();
 };
 

@@ -3,12 +3,14 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <math.h>
 #include "Trame.h"
 
 struct Fenetre {
 	int debut;
 	int fin;
 	int taille;
+	int debutSeq;
 };
 
 class TamponCirculaire {
@@ -21,6 +23,7 @@ private :
 	Fenetre fenetre;
 
 public :
+	TamponCirculaire();
 	TamponCirculaire(int taille, int tailleFenetre);
 	bool ajouter(Trame t);
 	//void enlever();

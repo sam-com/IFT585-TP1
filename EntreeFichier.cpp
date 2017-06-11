@@ -34,14 +34,21 @@ int EntreeFichier::getNext16Bits() {
 	fichier.get(c);
 
 	if (!fichier.eof()) {
-		retour = c << 7;
+		retour = c << 8;
 		fichier.get(c);
 		retour += c;
 	}
-
+	bool fi = fichier.eof();
 	return retour;
 }
 
 bool EntreeFichier::finFichierAtteint() {
+	bool fi = fichier.eof();
 	return !valide || fichier.eof();
+}
+
+void EntreeFichier::close() {
+	if (isValid()) {
+		fichier.close();
+	}
 }
