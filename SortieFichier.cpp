@@ -11,7 +11,7 @@ SortieFichier::SortieFichier(string destination)
 	if (destination != "") {
 		fichier.open(destination);
 	}
-
+    valide = true;
 	if (!fichier.is_open()) {
 		valide = false;
 	}

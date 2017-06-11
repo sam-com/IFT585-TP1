@@ -6,7 +6,7 @@ class SortieFichier
 {
 private:
 	std::ofstream fichier;
-	bool valide;
+    bool valide;
 public:
 	SortieFichier(std::string source);
 	SortieFichier(const SortieFichier&);

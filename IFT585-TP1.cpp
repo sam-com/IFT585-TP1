@@ -274,7 +274,7 @@ void EmetterRecepteur(string fichierEntree, string fichierSortie, Connection& co
 
 	entree.close();
 	sortie.close();
-	cout << "FINI" << endl;
+    afficher("FINI");
 }
 
 void supportTransmission(Connection& connectionT1, Connection& connectionT2) {
@@ -381,6 +381,7 @@ void afficherCommentaireEtTrame(const string s, Trame trame) {
 	uint16_t donnees = trame.getDonnees();
 	cout	<< (char) (donnees >> 8)
 			<< (char) donnees
+            << ")"
 			<< endl;
 }
 

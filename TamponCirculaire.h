@@ -19,7 +19,6 @@ private :
 	int debut;
 	int fin;
 	int size;
-	void augmenter(int&);
 	Fenetre fenetre;
 
 public :
@@ -27,12 +26,7 @@ public :
 	TamponCirculaire(int taille, int tailleFenetre);
 	~TamponCirculaire();
 	bool ajouter(Trame t);
-	//void enlever();
-	//bool estPlein();
-	//bool estVide();
 	bool peutInserer(int seq);
-	//bool fenetrePlein();
-	//bool fenetreVide();
 	bool estDebutDeFenetre(int seq);
 	uint16_t getSeqDebutFenetre();
 	uint16_t getSeqFinFenetre();

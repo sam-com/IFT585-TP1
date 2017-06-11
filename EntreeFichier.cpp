@@ -10,7 +10,7 @@ EntreeFichier::EntreeFichier(const EntreeFichier&) {
 EntreeFichier::EntreeFichier(string source)
 {
 	fichier.open(source);
-
+    valide = true;
 	if (!fichier.is_open()) {
 		valide = false;
 	}
